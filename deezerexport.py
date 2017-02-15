@@ -45,29 +45,34 @@ def get_playlist(playlistid):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'Deezer export script')
     parser.add_argument('uid', type = int, help = "User identifier")
-    parser.add_argument('-j', '--json', '--export', dest = "export",
-                        help = "Export playlists in a simple json format"
+    parser.add_argument('-j', '--json', '--export', dest = "export", help = "Export playlists in a simple json format"
                                "to the specified file")
+    parser.add_argument('-pl', '--playlist', dest = "playlist", help = "Export only this list")
     args = parser.parse_args()
     userdata = get_user_info(args.uid)
     print("Playlists for user %s" % userdata["name"])
     playlists = get_user_playlists(args.uid)
     playlists_data = []
     for row in playlists["data"]:
+        if args.playlist is not None and args.playlist != row["title"]:
+            continue
         playlistid = row["id"]
         playlist = get_playlist(playlistid)
         playlists_data.append(playlist)
         print("  Playlist %s" % playlist["title"])
         for track in playlist["tracks"]["data"]:
             print("    %s -- by %s" % (track["title"], track["artist"]["name"]))
+    if args.playlist is not None and not playlists_data:
+        print("  Playlist %s not found." % args.playlist)
     if args.export is not None:
         data = {"uid": args.uid, "user": userdata["name"], "playlists": []}
         for playlist in playlists_data:
             tracks = [{"title": track["title"],
                        "artist": track["artist"]["name"],
-                       "album": track["album"]["title"]}
+                       "album": track["album"]["title"],
+                       "length": track["duration"]}
                       for track in playlist["tracks"]["data"]]
             cur_playlist = {"title": playlist["title"], "tracks": tracks}
             data["playlists"].append(cur_playlist)
         with open(args.export, "w") as f:
-            json.dump(data, f)
+            json.dump(data, f, indent=2)
