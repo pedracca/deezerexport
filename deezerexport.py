@@ -16,6 +16,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import json
+import time
 try:
     from http.client import HTTPSConnection
 except ImportError:  # python2
@@ -39,8 +40,20 @@ def get_user_playlists(userid):
     return get_data(url)
 
 def get_playlist(playlistid):
-    url = deezer_api + "playlist/%d" % playlistid
-    return get_data(url)
+    url = deezer_api + "playlist/%d/tracks" % playlistid
+    playlist = get_data(url)
+    while "next" in playlist:
+        time.sleep(.1)
+        more_tracks = get_data(playlist["next"])
+        if "data" in more_tracks:
+            playlist["data"].extend(more_tracks["data"])
+        if "next" in more_tracks:
+            playlist["next"] = more_tracks["next"]
+        else:
+            playlist.pop("next")
+    if playlist["total"] != len(playlist["data"]):
+        print("WARNING! Not all tracks were loaded for %d" % playlistid)
+    return playlist
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'Deezer export script')
@@ -58,9 +71,10 @@ if __name__ == "__main__":
             continue
         playlistid = row["id"]
         playlist = get_playlist(playlistid)
+        playlist["title"] = row["title"]
         playlists_data.append(playlist)
-        print("  Playlist %s" % playlist["title"])
-        for track in playlist["tracks"]["data"]:
+        print("  Playlist %s" % row["title"])
+        for track in playlist["data"]:
             print("    %s -- by %s" % (track["title"], track["artist"]["name"]))
     if args.playlist is not None and not playlists_data:
         print("  Playlist %s not found." % args.playlist)
@@ -71,8 +85,8 @@ if __name__ == "__main__":
                        "artist": track["artist"]["name"],
                        "album": track["album"]["title"],
                        "length": track["duration"]}
-                      for track in playlist["tracks"]["data"]]
-            cur_playlist = {"title": playlist["title"], "tracks": tracks}
+                      for track in playlist["data"]]
+            cur_playlist = {"title": playlist["title"] + " (imported from Deezer)", "tracks": tracks}
             data["playlists"].append(cur_playlist)
         with open(args.export, "w") as f:
             json.dump(data, f, indent=2)
